@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>휘매쓰 연산 챌린지!</title>
+    <style>
+        body {
+            font-family: 'Nanum Gothic', sans-serif;
+            text-align: center;
+            background-color: #f0f8ff;
+            margin: 0;
+            padding: 0;
+        }
+        #game-container {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+        }
+        #energy-bar {
+            width: 80%;
+            height: 20px;
+            background-color: #ddd;
+            margin: 20px auto;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #energy {
+            width: 100%;
+            height: 100%;
+            background-color: #76c7c0;
+        }
+        .hidden {
+            display: none;
+        }
+        #question {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+        .option {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            width: 60%;
+            max-width: 400px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #e0f7fa;
+            border: 2px solid #0097a7;
+            border-radius: 5px;
+        }
+        #score, #lives, #total-time {
+            font-size: 1em;
+            margin: 10px;
+        }
+        #popup {
+            position: fixed;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -30%);
+            background-color: #fff9c4;
+            padding: 20px;
+            border: 2px solid #ffeb3b;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+        }
+        /* 시작 화면 스타일: 이름 입력과 난이도 선택 영역 */
+        #start-screen {
+            margin-top: 50px;
+        }
+        #start-screen input[type="text"] {
+            font-size: 1.2em;
+            padding: 5px;
+            margin-right: 10px;
+        }
+        #start-screen button {
+            font-size: 1.2em;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>휘매쓰 연산 챌린지!</h1>
+        <!-- 시작 화면: 이름 입력 + 난이도 선택 -->
+        <div id="start-screen">
+            <div>
+                <input type="text" id="player-name" placeholder="이름을 입력하세요">
+            </div>
+            <div id="difficulty-selection">
+                <p>난이도를 선택하세요:</p>
+                <button onclick="startGame('최상')">최상</button>
+                <button onclick="startGame('상')">상</button>
+                <button onclick="startGame('중')">중</button>
+                <button onclick="startGame('하')">하</button>
+            </div>
+        </div>
+        <!-- 게임 영역 -->
+        <div id="game" class="hidden">
+            <div id="energy-bar">
+                <div id="energy"></div>
+            </div>
+            <div id="question"></div>
+            <div id="options">
+                <button class="option" onclick="checkAnswer(0)" id="option0"></button>
+                <button class="option" onclick="checkAnswer(1)" id="option1"></button>
+                <button class="option" onclick="checkAnswer(2)" id="option2"></button>
+                <button class="option" onclick="checkAnswer(3)" id="option3"></button>
+            </div>
+            <div id="score">점수: 0</div>
+            <div id="lives">남은 기회: 3</div>
+            <div id="total-time">총 게임 시간: 0초</div>
+        </div>
+    </div>
+    <div id="popup"></div>
+    <script>
+        const problems = [
+            { question: '철수는 사과를 1개 가지고 있습니다. 영희는 사과를 1개 가지고 있습니다. 두 사람이 가진 사과는 모두 몇 개입니까?', answer: 2 },
+            { question: '민수는 연필을 2자루 가지고 있습니다. 지혜는 연필을 1자루 가지고 있습니다. 두 사람이 가진 연필은 모두 몇 자루입니까?', answer: 3 },
+            { question: '동수는 공을 1개 가지고 있습니다. 미나는 동수보다 3개 더 많이 가지고 있습니다. 두 사람이 가진 공은 모두 몇 개입니까?', answer: 5 },
+            { question: '지훈은 바나나를 2개 가지고 있습니다. 수지는 바나나를 4개 가지고 있습니다. 두 사람이 가진 바나나는 모두 몇 개입니까?', answer: 6 },
+            { question: '지민은 책을 3권 가지고 있습니다. 유나는 책을 4권 가지고 있습니다. 두 사람이 가진 책은 모두 몇 권입니까?', answer: 7 },
+            // ... 나머지 문제들 ...
+            { question: '지훈은 귤을 2개 가지고 있습니다. 수지는 귤을 3개 가지고 있습니다. 두 사람이 가진 귤은 모두 몇 개입니까?', answer: 5 }
+        ];
+        
+        let energyInterval;
+        let totalTimeInterval;
+        let energyWidth;
+        let energyDecreaseRate;
+        let currentProblemIndex;
+        let score = 0;
+        let lives = 3;
+        let totalTime = 0;
+        let difficulty;
+        let pointsPerQuestion;
+        let timeLimit;
+        let problemSequence = [];
+        let initialTimeLimit;
+        
+        // 시작 시 이름 입력란이 있으므로 이름을 전역 변수로 저장
+        // window.playerName에 저장됨
+        
+        // 시작 화면에서 이름과 난이도를 입력받고 게임 시작
+        function startGame(selectedDifficulty) {
+            let name = document.getElementById('player-name').value.trim();
+            if (name === "") {
+                alert("이름을 입력하세요.");
+                return;
+            }
+            window.playerName = name;
+            difficulty = selectedDifficulty;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game').classList.remove('hidden');
+            if (difficulty === '최상') {
+                timeLimit = 20;
+                pointsPerQuestion = 20;
+            } else if (difficulty === '상') {
+                timeLimit = 30;
+                pointsPerQuestion = 15;
+            } else if (difficulty === '중') {
+                timeLimit = 40;
+                pointsPerQuestion = 13;
+            } else {
+                timeLimit = Infinity;
+                pointsPerQuestion = 10;
+            }
+            initialTimeLimit = timeLimit;
+            energyDecreaseRate = 100 / timeLimit;
+            totalTimeInterval = setInterval(() => {
+                totalTime++;
+                document.getElementById('total-time').innerText = `총 게임 시간: ${totalTime}초`;
+            }, 1000);
+            problemSequence = [...problems];
+            shuffleArray(problemSequence);
+            nextQuestion();
+        }
+        
+        function nextQuestion() {
+            // 만약 기회가 다 떨어졌으면 게임 종료
+            if (lives <= 0) {
+                endGame();
+                return;
+            }
+            // "다음문제" 버튼이 남아있다면 제거
+            let nextBtn = document.getElementById('next-button');
+            if (nextBtn) nextBtn.remove();
+            
+            if (energyInterval) clearInterval(energyInterval);
+            energyWidth = 100;
+            document.getElementById('energy').style.width = '100%';
+            if (difficulty !== '하') {
+                // 난이도에 따라 남은 시간 조정
+                timeLimit = initialTimeLimit * Math.pow(0.99, score / pointsPerQuestion);
+                energyDecreaseRate = 100 / timeLimit;
+                energyInterval = setInterval(() => {
+                    energyWidth -= energyDecreaseRate * 0.1;
+                    document.getElementById('energy').style.width = energyWidth + '%';
+                    if (energyWidth <= 0) {
+                        clearInterval(energyInterval);
+                        lives--;
+                        document.getElementById('lives').innerText = `남은 기회: ${lives}`;
+                        showAnswer(false);
+                        if (lives > 0) {
+                            showNextButton();
+                        } else {
+                            endGame();
+                        }
+                    }
+                }, 100);
+            }
+            if (problemSequence.length === 0) {
+                problemSequence = [...problems];
+                shuffleArray(problemSequence);
+            }
+            currentProblemIndex = Math.floor(Math.random() * problemSequence.length);
+            const currentProblem = problemSequence[currentProblemIndex];
+            document.getElementById('question').innerText = currentProblem.question;
+            generateOptions(currentProblem.answer);
+            // 문제는 한 번 출제된 후 배열에서 제거
+            problemSequence.splice(currentProblemIndex, 1);
+        }
+        
+        // 정답 옵션 생성 – 정답을 window.currentCorrectAnswer에 저장
+        function generateOptions(correctAnswer) {
+            let options = new Set();
+            options.add(correctAnswer);
+            while (options.size < 4) {
+                let wrongAnswer = correctAnswer + Math.floor(Math.random() * 5) - 2;
+                if (wrongAnswer !== correctAnswer && wrongAnswer > 0 && wrongAnswer <= 20 && !options.has(wrongAnswer)) {
+                    options.add(wrongAnswer);
+                }
+            }
+            options = Array.from(options);
+            shuffleArray(options);
+            for (let i = 0; i < 4; i++) {
+                document.getElementById(`option${i}`).innerText = options[i];
+                if (options[i] === correctAnswer) {
+                    window.correctOption = i;
+                }
+            }
+            window.currentCorrectAnswer = correctAnswer;
+        }
+        
+        // 사용자가 옵션을 선택하면 정답 여부 체크 후 "다음문제" 버튼 노출
+        function checkAnswer(selectedOption) {
+            if (energyInterval) clearInterval(energyInterval);
+            if (selectedOption === window.correctOption) {
+                score += pointsPerQuestion;
+                document.getElementById('score').innerText = `점수: ${score}`;
+                showPopup();
+            } else {
+                lives--;
+                document.getElementById('lives').innerText = `남은 기회: ${lives}`;
+                showAnswer(true);
+            }
+            // 정답 선택 후 바로 다음 문제로 넘어가지 않고 "다음문제" 버튼을 보여줌
+            if (lives > 0) {
+                showNextButton();
+            } else {
+                endGame();
+            }
+        }
+        
+        // "다음문제" 버튼 생성 (이미 존재하지 않을 경우)
+        function showNextButton() {
+            if (!document.getElementById('next-button')) {
+                let nextButton = document.createElement('button');
+                nextButton.id = 'next-button';
+                nextButton.innerText = '다음문제';
+                nextButton.style.marginTop = '20px';
+                nextButton.onclick = () => {
+                    nextButton.remove();
+                    nextQuestion();
+                };
+                // 게임 영역 내의 상위 컨테이너에 추가 (game-container에 추가)
+                document.getElementById('game-container').appendChild(nextButton);
+            }
+        }
+        
+        // 정답 확인 후 팝업 또는 알림으로 정답 표시
+        function showAnswer(isWrong) {
+            if (isWrong) {
+                alert(`틀렸습니다! 정답은 ${window.currentCorrectAnswer}입니다.`);
+            } else {
+                alert(`시간 초과! 정답은 ${window.currentCorrectAnswer}입니다.`);
+            }
+        }
+        
+        function endGame() {
+            clearInterval(totalTimeInterval);
+            alert(`게임 종료! 최종 점수: ${score}`);
+            // 게임 영역을 결과 전송 화면으로 대체
+            let container = document.getElementById('game-container');
+            container.innerHTML = `
+                <h1>게임 종료!</h1>
+                <p>최종 점수: ${score}</p>
+                <p>총 게임 시간: ${totalTime}초</p>
+                <button id="send-button">전송하기</button>
+                <div id="response" style="margin-top:20px;"></div>
+            `;
+            document.getElementById('send-button').onclick = sendData;
+        }
+        
+        // 배열 섞기 함수
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        
+        // 팝업 메시지 (가끔 상품권 당첨 등)
+        function showPopup() {
+            let randomNumber = Math.random();
+            let popupText = '';
+            if (randomNumber < 0.0001) {
+                popupText = '축하합니다! 5000원 상품권에 당첨되셨습니다!';
+            } else if (randomNumber < 0.001) {
+                popupText = '축하합니다! 3000원 상품권에 당첨되셨습니다!';
+            } else if (randomNumber < 0.002) {
+                popupText = '축하합니다! 1회 면제권을 획득하셨습니다!';
+                lives++;
+                document.getElementById('lives').innerText = `남은 기회: ${lives}`;
+            }
+            if (popupText) {
+                const popup = document.getElementById('popup');
+                popup.innerText = popupText;
+                popup.style.display = 'block';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        // 서버 데이터 전송 함수 (전송 성공/오류 메시지 표시)
+        async function sendData() {
+            const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+            const requestData = {
+                game: 'game',
+                name: window.playerName || '익명',
+                score: parseInt(score, 10),
+                elapsedTime: parseInt(totalTime, 10)
+            };
+        
+            try {
+                const response = await fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                const responseData = await response.json();
+                if (response.ok) {
+                    document.getElementById('response').innerText = "성공: " + JSON.stringify(responseData, null, 2);
+                } else {
+                    document.getElementById('response').innerText = "오류: " + JSON.stringify(responseData, null, 2);
+                }
+            } catch (error) {
+                console.error('요청 실패:', error);
+                document.getElementById('response').innerText = "네트워크 오류: " + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
